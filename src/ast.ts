@@ -1,7 +1,4 @@
-import { Node } from './javascript';
-import { is_if_statement, Statement, WhileStatement } from './nodes';
-import { Syntax } from './syntax';
-
+/*
 export function isDefined(node: Node | null | undefined): node is Node {
     if (node === null) {
         return false;
@@ -13,11 +10,14 @@ export function isDefined(node: Node | null | undefined): node is Node {
         return true;
     }
 }
-
+*/
+/*
 export function isUndefined(node: Node | null | undefined): boolean {
     return !isDefined(node);
 }
+*/
 
+/*
 export function isExpression(node: Node | null | undefined): boolean {
     if (isDefined(node)) {
         switch (node.type) {
@@ -46,7 +46,9 @@ export function isExpression(node: Node | null | undefined): boolean {
         return false;
     }
 }
+*/
 
+/*
 export function isIterationStatement(node: Node | null | undefined) {
     if (isDefined(node)) {
         switch (node.type) {
@@ -63,7 +65,9 @@ export function isIterationStatement(node: Node | null | undefined) {
         return false;
     }
 }
+*/
 
+/*
 export function isStatement(node: Node | null | undefined): boolean {
     if (isDefined(node)) {
         switch (node.type) {
@@ -76,6 +80,7 @@ export function isStatement(node: Node | null | undefined): boolean {
             case Syntax.ExpressionStatement:
             case Syntax.ForInStatement:
             case Syntax.ForStatement:
+            case Syntax.FunctionDeclaration:
             case Syntax.IfStatement:
             case Syntax.LabeledStatement:
             case Syntax.ReturnStatement:
@@ -94,11 +99,14 @@ export function isStatement(node: Node | null | undefined): boolean {
         return false;
     }
 }
+*/
 
+/*
 export function isSourceElement(node: Node | null | undefined) {
     return isStatement(node) || isDefined(node) && node.type === Syntax.FunctionDeclaration;
 }
-
+*/
+/*
 export function trailingStatement(node: Node): Statement | null {
     switch (node.type) {
         case Syntax.IfStatement: {
@@ -121,7 +129,8 @@ export function trailingStatement(node: Node): Statement | null {
     }
     return null;
 }
-
+*/
+/*
 export function isProblematicIfStatement(node: Node): boolean {
     let current: Statement | null;
 
@@ -145,3 +154,4 @@ export function isProblematicIfStatement(node: Node): boolean {
         return false;
     }
 }
+*/

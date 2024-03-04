@@ -15,11 +15,17 @@ export class JSXClosingElement extends BaseNode {
     }
 }
 
+export class JSXClosingFragment extends BaseNode {
+    constructor() {
+        super(Syntax.JSXClosingFragment);
+    }
+}
+
 export class JSXElement extends BaseNode {
-    readonly openingElement: JSXOpeningElement;
+    readonly openingElement: JSXOpeningElement | JSXOpeningFragment;
     readonly children: JSXChild[];
-    readonly closingElement: JSXClosingElement | null;
-    constructor(openingElement: JSXOpeningElement, children: JSXChild[], closingElement: JSXClosingElement | null) {
+    readonly closingElement: JSXClosingElement | JSXClosingFragment | null;
+    constructor(openingElement: JSXOpeningElement | JSXOpeningFragment, children: JSXChild[], closingElement: JSXClosingElement | JSXClosingFragment | null) {
         super(Syntax.JSXElement);
         this.openingElement = openingElement;
         this.children = children;
@@ -88,6 +94,14 @@ export class JSXOpeningElement extends BaseNode {
         this.name = name;
         this.selfClosing = selfClosing;
         this.attributes = attributes;
+    }
+}
+
+export class JSXOpeningFragment extends BaseNode {
+    readonly selfClosing: boolean;
+    constructor(selfClosing: boolean) {
+        super(Syntax.JSXOpeningFragment);
+        this.selfClosing = selfClosing;
     }
 }
 

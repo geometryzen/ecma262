@@ -2,7 +2,11 @@ build/
 es2015/
 coverage/
 dist/
+dist/esprima.js
 docs/
+dump.txt
 node_modules/
+src/*.js
 system/
+test/dist
 types/

@@ -110,14 +110,17 @@ if (failures.length) {
             expectedObject = JSON.parse(failure.expected);
             actualObject = JSON.parse(failure.actual);
 
-            console.log(failure.source + ': Expected\n    ' + failure.expected.split('\n').join('\n    ') + '\nto match\n    ' + failure.actual + '\nDiff:\n' + diff(expectedObject, actualObject));
-        }
-        catch (ex) {
-            console.log(failure.source + ': Expected\n    ' + failure.expected.split('\n').join('\n    ') + '\nto match\n    ' + failure.actual);
+            console.log(failure.source + ': Expected\n    ' +
+                failure.expected.split('\n').join('\n    ') +
+                '\nto match\n    ' + failure.actual + '\nDiff:\n' +
+                diff(expectedObject, actualObject));
+        } catch (ex) {
+            console.log(failure.source + ': Expected\n    ' +
+                failure.expected.split('\n').join('\n    ') +
+                '\nto match\n    ' + failure.actual);
         }
     });
-}
-else {
+} else {
     console.log(header);
 }
 

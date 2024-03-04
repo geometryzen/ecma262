@@ -2,7 +2,7 @@ import { assert } from './assert';
 import { Character } from './character';
 import { ErrorHandler } from './error-handler';
 import { Messages } from './messages';
-import { RawToken, TokenKind } from './token';
+import { NotEscapeSequenceHead, RawToken, Token } from './token';
 
 function hexValue(ch: string): number {
     return '0123456789abcdef'.indexOf(ch.toLowerCase());
@@ -41,6 +41,7 @@ export class Scanner {
     readonly source: string;
     readonly errorHandler: ErrorHandler;
     trackComment: boolean;
+    isModule: boolean;
 
     index: number;
     lineNumber: number;
@@ -53,6 +54,7 @@ export class Scanner {
         this.source = code;
         this.errorHandler = handler;
         this.trackComment = false;
+        this.isModule = false;
 
         this.length = code.length;
         this.index = 0;
@@ -93,8 +95,8 @@ export class Scanner {
 
     skipSingleLineComment(offset: number): Comment[] {
         let comments: Comment[] = [];
-        let start: number = -1;
-        let loc: SourceLocation = { start: { line: -1, column: -1 }, end: { line: -1, column: -1 } };
+        let start: number | undefined;
+        let loc: SourceLocation | undefined;
 
         if (this.trackComment) {
             comments = [];
@@ -112,15 +114,15 @@ export class Scanner {
             const ch = this.source.charCodeAt(this.index);
             ++this.index;
             if (Character.isLineTerminator(ch)) {
-                if (this.trackComment) {
+                if (this.trackComment && loc) {
                     loc.end = {
                         line: this.lineNumber,
                         column: this.index - this.lineStart - 1
                     };
                     const entry: Comment = {
                         multiLine: false,
-                        slice: [start + offset, this.index - 1],
-                        range: [start, this.index - 1],
+                        slice: [start as number + offset, this.index - 1],
+                        range: [start as number, this.index - 1],
                         loc: loc
                     };
                     comments.push(entry);
@@ -134,15 +136,15 @@ export class Scanner {
             }
         }
 
-        if (this.trackComment) {
+        if (this.trackComment && loc) {
             loc.end = {
                 line: this.lineNumber,
                 column: this.index - this.lineStart
             };
             const entry: Comment = {
                 multiLine: false,
-                slice: [start + offset, this.index],
-                range: [start, this.index],
+                slice: [start as number + offset, this.index],
+                range: [start as number, this.index],
                 loc: loc
             };
             comments.push(entry);
@@ -153,8 +155,8 @@ export class Scanner {
 
     skipMultiLineComment(): Comment[] {
         let comments: Comment[] = [];
-        let start: number = -1;
-        let loc: SourceLocation = { start: { line: -1, column: -1 }, end: { line: -1, column: -1 } };
+        let start: number | undefined;
+        let loc: SourceLocation | undefined;
 
         if (this.trackComment) {
             comments = [];
@@ -182,15 +184,15 @@ export class Scanner {
                 // Block comment ends with '*/'.
                 if (this.source.charCodeAt(this.index + 1) === 0x2F) {
                     this.index += 2;
-                    if (this.trackComment) {
+                    if (this.trackComment && loc) {
                         loc.end = {
                             line: this.lineNumber,
                             column: this.index - this.lineStart
                         };
                         const entry: Comment = {
                             multiLine: true,
-                            slice: [start + 2, this.index - 2],
-                            range: [start, this.index],
+                            slice: [start as number + 2, this.index - 2],
+                            range: [start as number, this.index],
                             loc: loc
                         };
                         comments.push(entry);
@@ -205,15 +207,15 @@ export class Scanner {
         }
 
         // Ran off the end of the file - the whole thing is a comment
-        if (this.trackComment) {
+        if (this.trackComment && loc) {
             loc.end = {
                 line: this.lineNumber,
                 column: this.index - this.lineStart
             };
             const entry: Comment = {
                 multiLine: true,
-                slice: [start + 2, this.index],
-                range: [start, this.index],
+                slice: [start as number + 2, this.index],
+                range: [start as number, this.index],
                 loc: loc
             };
             comments.push(entry);
@@ -223,8 +225,8 @@ export class Scanner {
         return comments;
     }
 
-    scanComments(): Comment[] {
-        let comments: Comment[] = [];
+    scanComments(): Comment[] | undefined {
+        let comments: Comment[] | undefined;
         if (this.trackComment) {
             comments = [];
         }
@@ -251,7 +253,7 @@ export class Scanner {
                     this.index += 2;
                     const comment = this.skipSingleLineComment(2);
                     if (this.trackComment) {
-                        comments = comments.concat(comment);
+                        comments = comments!.concat(comment);
                     }
                     start = true;
                 }
@@ -259,7 +261,7 @@ export class Scanner {
                     this.index += 2;
                     const comment = this.skipMultiLineComment();
                     if (this.trackComment) {
-                        comments = comments.concat(comment);
+                        comments = comments!.concat(comment);
                     }
                 }
                 else {
@@ -273,19 +275,19 @@ export class Scanner {
                     this.index += 3;
                     const comment = this.skipSingleLineComment(3);
                     if (this.trackComment) {
-                        comments = comments.concat(comment);
+                        comments = comments!.concat(comment);
                     }
                 }
                 else {
                     break;
                 }
             }
-            else if (ch === 0x3C) { // U+003C is '<'
+            else if (ch === 0x3C && !this.isModule) { // U+003C is '<'
                 if (this.source.slice(this.index + 1, this.index + 4) === '!--') {
                     this.index += 4; // `<!--`
                     const comment = this.skipSingleLineComment(4);
                     if (this.trackComment) {
-                        comments = comments.concat(comment);
+                        comments = comments!.concat(comment);
                     }
                 }
                 else {
@@ -380,7 +382,31 @@ export class Scanner {
         return String.fromCharCode(code);
     }
 
-    scanUnicodeCodePointEscape(): string {
+    private tryToScanUnicodeCodePointEscape(): string | null {
+        let ch = this.source[this.index];
+        let code = 0;
+
+        // At least, one hex digit is required.
+        if (ch === '}') {
+            return null;
+        }
+
+        while (!this.eof()) {
+            ch = this.source[this.index++];
+            if (!Character.isHexDigit(ch.charCodeAt(0))) {
+                break;
+            }
+            code = code * 16 + hexValue(ch);
+        }
+
+        if (code > 0x10FFFF || ch !== '}') {
+            return null;
+        }
+
+        return Character.fromCodePoint(code);
+    }
+
+    private scanUnicodeCodePointEscape(): string {
         let ch = this.source[this.index];
         let code = 0;
 
@@ -512,7 +538,7 @@ export class Scanner {
     // https://tc39.github.io/ecma262/#sec-names-and-keywords
 
     scanIdentifier(): RawToken {
-        let type: TokenKind;
+        let type: Token;
         const start = this.index;
 
         // Backslash (U+005C) starts an escaped character.
@@ -521,22 +547,22 @@ export class Scanner {
         // There is no keyword or literal with only one character.
         // Thus, it must be an identifier.
         if (id.length === 1) {
-            type = TokenKind.Identifier;
+            type = Token.Identifier;
         }
         else if (this.isKeyword(id)) {
-            type = TokenKind.Keyword;
+            type = Token.Keyword;
         }
         else if (id === 'null') {
-            type = TokenKind.NullLiteral;
+            type = Token.NullLiteral;
         }
         else if (id === 'true' || id === 'false') {
-            type = TokenKind.BooleanLiteral;
+            type = Token.BooleanLiteral;
         }
         else {
-            type = TokenKind.Identifier;
+            type = Token.Identifier;
         }
 
-        if (type !== TokenKind.Identifier && (start + id.length !== this.index)) {
+        if (type !== Token.Identifier && (start + id.length !== this.index)) {
             const restore = this.index;
             this.index = start;
             this.tolerateUnexpectedToken(Messages.InvalidEscapedReservedWord);
@@ -583,13 +609,25 @@ export class Scanner {
                 ++this.index;
                 this.curlyStack.pop();
                 break;
+            case '?': {
+                ++this.index;
+                if (this.source[this.index] === '?') {
+                    ++this.index;
+                    str = '??';
+                } if (this.source[this.index] === '.' && !/^\d$/.test(this.source[this.index + 1])) {
+                    // "?." in "foo?.3:0" should not be treated as optional chaining.
+                    // See https://github.com/tc39/proposal-optional-chaining#notes
+                    ++this.index;
+                    str = '?.';
+                }
+                break;
+            }
             case ')':
             case ';':
             case ',':
             case '[':
             case ']':
             case ':':
-            case '?':
             case '~':
                 ++this.index;
                 break;
@@ -609,18 +647,19 @@ export class Scanner {
                         this.index += 3;
                     }
                     else {
-
                         // 2-character punctuators.
                         str = str.substr(0, 2);
-                        if (str === '&&' || str === '||' || str === '==' || str === '!=' ||
+                        if (str === '&&' || str === '||' || str === '??' ||
+                            str === '==' || str === '!=' ||
                             str === '+=' || str === '-=' || str === '*=' || str === '/=' ||
-                            str === '++' || str === '--' || str === '<<' || str === '>>' ||
+                            str === '++' || str === '--' ||
+                            str === '<<' || str === '>>' ||
                             str === '&=' || str === '|=' || str === '^=' || str === '%=' ||
-                            str === '<=' || str === '>=' || str === '=>' || str === '**') {
+                            str === '<=' || str === '>=' || str === '=>' ||
+                            str === '**') {
                             this.index += 2;
                         }
                         else {
-
                             // 1-character punctuators.
                             str = this.source[this.index];
                             if ('<>=!+-*%&|^/'.indexOf(str) >= 0) {
@@ -636,7 +675,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.Punctuator,
+            type: Token.Punctuator,
             value: str,
             lineNumber: this.lineNumber,
             lineStart: this.lineStart,
@@ -666,7 +705,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.NumericLiteral,
+            type: Token.NumericLiteral,
             value: parseInt('0x' + num, 16),
             lineNumber: this.lineNumber,
             lineStart: this.lineStart,
@@ -677,10 +716,9 @@ export class Scanner {
 
     scanBinaryLiteral(start: number): RawToken {
         let num = '';
-        let ch;
 
         while (!this.eof()) {
-            ch = this.source[this.index];
+            const ch = this.source[this.index];
             if (ch !== '0' && ch !== '1') {
                 break;
             }
@@ -693,7 +731,7 @@ export class Scanner {
         }
 
         if (!this.eof()) {
-            ch = this.source.charCodeAt(this.index);
+            const ch = this.source.charCodeAt(this.index);
             /* istanbul ignore else */
             if (Character.isIdentifierStart(ch) || Character.isDecimalDigit(ch)) {
                 this.throwUnexpectedToken();
@@ -701,7 +739,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.NumericLiteral,
+            type: Token.NumericLiteral,
             value: parseInt(num, 2),
             lineNumber: this.lineNumber,
             lineStart: this.lineStart,
@@ -739,7 +777,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.NumericLiteral,
+            type: Token.NumericLiteral,
             value: parseInt(num, 8),
             octal: octal,
             lineNumber: this.lineNumber,
@@ -836,7 +874,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.NumericLiteral,
+            type: Token.NumericLiteral,
             value: parseFloat(num),
             lineNumber: this.lineNumber,
             lineStart: this.lineStart,
@@ -948,7 +986,7 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.StringLiteral,
+            type: Token.StringLiteral,
             value: str,
             octal: octal,
             lineNumber: this.lineNumber,
@@ -960,13 +998,14 @@ export class Scanner {
 
     // https://tc39.github.io/ecma262/#sec-template-literal-lexical-components
 
-    scanTemplate(): RawToken {
+    private scanTemplate(): RawToken {
         let cooked = '';
         let terminated = false;
         const start = this.index;
 
         const head = (this.source[start] === '`');
         let tail = false;
+        let notEscapeSequenceHead: NotEscapeSequenceHead | null = null;
         let rawOffset = 2;
 
         ++this.index;
@@ -988,6 +1027,9 @@ export class Scanner {
                 }
                 cooked += ch;
             }
+            else if (notEscapeSequenceHead !== null) {
+                continue;
+            }
             else if (ch === '\\') {
                 ch = this.source[this.index++];
                 if (!Character.isLineTerminator(ch.charCodeAt(0))) {
@@ -1004,26 +1046,32 @@ export class Scanner {
                         case 'u':
                             if (this.source[this.index] === '{') {
                                 ++this.index;
-                                cooked += this.scanUnicodeCodePointEscape();
-                            }
-                            else {
-                                const restore = this.index;
-                                const unescaped = this.scanHexEscape(ch);
-                                if (unescaped !== null) {
-                                    cooked += unescaped;
+                                const unicodeCodePointEscape = this.tryToScanUnicodeCodePointEscape();
+                                if (unicodeCodePointEscape === null) {
+                                    notEscapeSequenceHead = 'u';
                                 }
                                 else {
-                                    this.index = restore;
-                                    cooked += ch;
+                                    cooked += unicodeCodePointEscape;
+                                }
+                            }
+                            else {
+                                const unescapedChar = this.scanHexEscape(ch);
+                                if (unescapedChar === null) {
+                                    notEscapeSequenceHead = 'u';
+                                }
+                                else {
+                                    cooked += unescapedChar;
                                 }
                             }
                             break;
                         case 'x': {
                             const unescaped = this.scanHexEscape(ch);
                             if (unescaped === null) {
-                                this.throwUnexpectedToken(Messages.InvalidHexEscapeSequence);
+                                notEscapeSequenceHead = 'x';
                             }
-                            cooked += unescaped;
+                            else {
+                                cooked += unescaped;
+                            }
                             break;
                         }
                         case 'b':
@@ -1039,14 +1087,16 @@ export class Scanner {
                         default:
                             if (ch === '0') {
                                 if (Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-                                    // Illegal: \01 \02 and so on
-                                    this.throwUnexpectedToken(Messages.TemplateOctalLiteral);
+                                    // NotEscapeSequence: \01 \02 and so on
+                                    notEscapeSequenceHead = '0';
                                 }
-                                cooked += '\0';
+                                else {
+                                    cooked += '\0';
+                                }
                             }
-                            else if (Character.isOctalDigit(ch.charCodeAt(0))) {
-                                // Illegal: \1 \2
-                                this.throwUnexpectedToken(Messages.TemplateOctalLiteral);
+                            else if (Character.isDecimalDigitChar(ch)) {
+                                // NotEscapeSequence: \1 \2
+                                notEscapeSequenceHead = ch;
                             }
                             else {
                                 cooked += ch;
@@ -1084,11 +1134,12 @@ export class Scanner {
         }
 
         return {
-            type: TokenKind.Template,
+            type: Token.Template,
             value: this.source.slice(start + 1, this.index - rawOffset),
-            cooked: cooked,
+            cooked: notEscapeSequenceHead === null ? cooked : null,
             head: head,
             tail: tail,
+            notEscapeSequenceHead: notEscapeSequenceHead,
             lineNumber: this.lineNumber,
             lineStart: this.lineStart,
             start: start,
@@ -1250,7 +1301,7 @@ export class Scanner {
         const value = this.testRegExp(pattern, flags);
 
         return {
-            type: TokenKind.RegularExpression,
+            type: Token.RegularExpression,
             value: '',
             pattern: pattern,
             flags: flags,
@@ -1265,7 +1316,7 @@ export class Scanner {
     lex(): RawToken {
         if (this.eof()) {
             return {
-                type: TokenKind.EOF,
+                type: Token.EOF,
                 value: '',
                 lineNumber: this.lineNumber,
                 lineStart: this.lineStart,

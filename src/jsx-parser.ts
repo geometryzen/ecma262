@@ -6,6 +6,7 @@ import {
     JSXAttributeValue,
     JSXChild,
     JSXClosingElement,
+    JSXClosingFragment,
     JSXElement,
     JSXElementAttribute,
     JSXElementName,
@@ -15,19 +16,20 @@ import {
     JSXMemberExpression,
     JSXNamespacedName,
     JSXOpeningElement,
+    JSXOpeningFragment,
     JSXSpreadAttribute,
     JSXText
 } from './jsx-nodes';
 import { Expression, Literal } from './nodes';
 import { Marker, Parser } from './parser';
 import { Syntax } from './syntax';
-import { as_string, RawToken, TokenKind } from './token';
+import { as_string, RawToken, Token } from './token';
 import { XHTMLEntities } from './xhtml-entities';
 
 interface MetaJSXElement {
     node: Marker;
-    opening: JSXOpeningElement;
-    closing: JSXClosingElement | null;
+    opening: JSXOpeningElement | JSXOpeningFragment;
+    closing: JSXClosingElement | JSXClosingFragment | null;
     children: JSXChild[];
 }
 
@@ -48,7 +50,7 @@ function getQualifiedElementName(elementName: JSXElementName): string {
             return getQualifiedElementName(expr.object) + '.' + getQualifiedElementName(expr.property);
         }
         default: {
-            throw new Error();
+            throw new Error(`getQualifiedElementName`);
         }
     }
 }
@@ -166,7 +168,7 @@ export class JSXParser extends Parser {
         if (cp === 60 || cp === 62 || cp === 47 || cp === 58 || cp === 61 || cp === 123 || cp === 125) {
             const value = this.scanner.source[this.scanner.index++];
             return {
-                type: TokenKind.Punctuator,
+                type: Token.Punctuator,
                 value: value,
                 lineNumber: this.scanner.lineNumber,
                 lineStart: this.scanner.lineStart,
@@ -194,7 +196,7 @@ export class JSXParser extends Parser {
             }
 
             return {
-                type: TokenKind.StringLiteral,
+                type: Token.StringLiteral,
                 value: str,
                 lineNumber: this.scanner.lineNumber,
                 lineStart: this.scanner.lineStart,
@@ -211,7 +213,7 @@ export class JSXParser extends Parser {
             const start = this.scanner.index;
             this.scanner.index += value.length;
             return {
-                type: TokenKind.Punctuator,
+                type: Token.Punctuator,
                 value: value,
                 lineNumber: this.scanner.lineNumber,
                 lineStart: this.scanner.lineStart,
@@ -224,7 +226,7 @@ export class JSXParser extends Parser {
         if (cp === 96) {
             // Only placeholder, since it will be rescanned as a real assignment expression.
             return {
-                type: TokenKind.Template,
+                type: Token.Template,
                 value: '',
                 lineNumber: this.scanner.lineNumber,
                 lineStart: this.scanner.lineStart,
@@ -252,7 +254,7 @@ export class JSXParser extends Parser {
             }
             const id = this.scanner.source.slice(start, this.scanner.index);
             return {
-                type: TokenKind.JSXIdentifier,
+                type: Token.JSXIdentifier,
                 value: id,
                 lineNumber: this.scanner.lineNumber,
                 lineStart: this.scanner.lineStart,
@@ -311,7 +313,7 @@ export class JSXParser extends Parser {
         this.lastMarker.column = this.scanner.index - this.scanner.lineStart;
 
         const token: RawToken = {
-            type: TokenKind.JSXText,
+            type: Token.JSXText,
             value: text,
             lineNumber: this.scanner.lineNumber,
             lineStart: this.scanner.lineStart,
@@ -340,7 +342,7 @@ export class JSXParser extends Parser {
 
     expectJSX(value: string): void {
         const token = this.nextJSXToken();
-        if (token.type !== TokenKind.Punctuator || token.value !== value) {
+        if (token.type !== Token.Punctuator || token.value !== value) {
             this.throwUnexpectedToken(token);
         }
     }
@@ -349,13 +351,13 @@ export class JSXParser extends Parser {
 
     matchJSX(value: string): boolean {
         const next = this.peekJSXToken();
-        return next.type === TokenKind.Punctuator && next.value === value;
+        return next.type === Token.Punctuator && next.value === value;
     }
 
     parseJSXIdentifier(): JSXIdentifier {
         const node = this.createJSXNode();
         const token = this.nextJSXToken();
-        if (token.type !== TokenKind.JSXIdentifier) {
+        if (token.type !== Token.JSXIdentifier) {
             this.throwUnexpectedToken(token);
         }
         // The cast is appropriate because we have determined the token type.
@@ -408,7 +410,7 @@ export class JSXParser extends Parser {
     parseJSXStringLiteralAttribute(): Literal {
         const node = this.createJSXNode();
         const token = this.nextJSXToken();
-        if (token.type !== TokenKind.StringLiteral) {
+        if (token.type !== Token.StringLiteral) {
             this.throwUnexpectedToken(token);
         }
         const raw = this.getTokenRaw(token);
@@ -471,10 +473,15 @@ export class JSXParser extends Parser {
         return attributes;
     }
 
-    parseJSXOpeningElement(): JSXOpeningElement {
+    parseJSXOpeningElement(): JSXOpeningElement | JSXOpeningFragment {
         const node = this.createJSXNode();
 
         this.expectJSX('<');
+        if (this.matchJSX('>')) {
+            this.expectJSX('>');
+            return this.finalize(node, new JSXOpeningFragment(false));
+        }
+
         const name = this.parseJSXElementName();
         const attributes = this.parseJSXAttributes();
         const selfClosing = this.matchJSX('/');
@@ -486,15 +493,19 @@ export class JSXParser extends Parser {
         return this.finalize(node, new JSXOpeningElement(name, selfClosing, attributes));
     }
 
-    parseJSXBoundaryElement(): JSXOpeningElement | JSXClosingElement {
+    parseJSXBoundaryElement(): JSXOpeningElement | JSXClosingElement | JSXOpeningFragment | JSXClosingFragment {
         const node = this.createJSXNode();
 
         this.expectJSX('<');
         if (this.matchJSX('/')) {
             this.expectJSX('/');
-            const name = this.parseJSXElementName();
+            if (this.matchJSX('>')) {
+                this.expectJSX('>');
+                return this.finalize(node, new JSXClosingFragment());
+            }
+            const elementName = this.parseJSXElementName();
             this.expectJSX('>');
-            return this.finalize(node, new JSXClosingElement(name));
+            return this.finalize(node, new JSXClosingElement(elementName));
         }
 
         const name = this.parseJSXElementName();
@@ -578,8 +589,8 @@ export class JSXParser extends Parser {
             }
             if (element.type === Syntax.JSXClosingElement) {
                 el.closing = element as JSXClosingElement;
-                const open = getQualifiedElementName(el.opening.name);
-                const close = getQualifiedElementName(el.closing.name);
+                const open = getQualifiedElementName((el.opening as JSXOpeningElement).name);
+                const close = getQualifiedElementName((el.closing as JSXClosingElement).name);
                 if (open !== close) {
                     this.tolerateError('Expected corresponding JSX closing tag for %0', open);
                 }
@@ -593,6 +604,16 @@ export class JSXParser extends Parser {
                     break;
                 }
             }
+            if (element.type === Syntax.JSXClosingFragment) {
+                el.closing = element as JSXClosingFragment;
+                if (el.opening.type !== Syntax.JSXOpeningFragment) {
+                    this.tolerateError('Expected corresponding JSX closing tag for jsx fragment');
+                }
+                else {
+                    break;
+                }
+            }
+
         }
 
         return el;
@@ -603,7 +624,7 @@ export class JSXParser extends Parser {
 
         const opening = this.parseJSXOpeningElement();
         let children: JSXChild[] = [];
-        let closing: JSXClosingElement | null = null;
+        let closing: JSXClosingElement | JSXClosingFragment | null = null;
 
         if (!opening.selfClosing) {
             const el = this.parseComplexJSXElement({ node, opening, closing, children });

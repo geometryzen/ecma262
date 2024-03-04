@@ -1,6 +1,6 @@
 import { SourceLocation } from './scanner';
 
-export const enum TokenKind {
+export const enum Token {
     BooleanLiteral = 1,
     EOF,
     Identifier,
@@ -18,20 +18,20 @@ export const enum TokenKind {
 }
 
 export const TokenName: { [key: number]: string } = {};
-TokenName[TokenKind.BooleanLiteral] = 'Boolean';
-TokenName[TokenKind.EOF] = '<end>';
-TokenName[TokenKind.Identifier] = 'Identifier';
-TokenName[TokenKind.Keyword] = 'Keyword';
-TokenName[TokenKind.NullLiteral] = 'Null';
-TokenName[TokenKind.NumericLiteral] = 'Numeric';
-TokenName[TokenKind.Punctuator] = 'Punctuator';
-TokenName[TokenKind.StringLiteral] = 'String';
-TokenName[TokenKind.RegularExpression] = 'RegularExpression';
-TokenName[TokenKind.Template] = 'Template';
-TokenName[TokenKind.JSXIdentifier] = 'JSXIdentifier';
-TokenName[TokenKind.JSXText] = 'JSXText';
-TokenName[TokenKind.BlockComment] = 'BlockComment';
-TokenName[TokenKind.LineComment] = 'LineComment';
+TokenName[Token.BooleanLiteral] = 'Boolean';
+TokenName[Token.EOF] = '<end>';
+TokenName[Token.Identifier] = 'Identifier';
+TokenName[Token.Keyword] = 'Keyword';
+TokenName[Token.NullLiteral] = 'Null';
+TokenName[Token.NumericLiteral] = 'Numeric';
+TokenName[Token.Punctuator] = 'Punctuator';
+TokenName[Token.StringLiteral] = 'String';
+TokenName[Token.RegularExpression] = 'RegularExpression';
+TokenName[Token.Template] = 'Template';
+TokenName[Token.JSXIdentifier] = 'JSXIdentifier';
+TokenName[Token.JSXText] = 'JSXText';
+TokenName[Token.BlockComment] = 'BlockComment';
+TokenName[Token.LineComment] = 'LineComment';
 
 // type keywords = 'async' | 'await' | 'class' | 'constructor' | 'delete' | 'for' | 'function' | 'get' | 'if' | 'in' | 'let' | 'new' | 'set' | 'super' | 'target' | 'this' | 'typeof' | 'void' | 'while' | 'with' | 'yield';
 // type more = '{' | '(' | '[' | '*' | ':' | ',' | ';' | '=' | '.' | '...' | '*=' | '**=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '>>>=' | '&=' | '^=' | '|=';
@@ -60,7 +60,7 @@ export function assert_raw_token_value(x: unknown): ReaderEntry {
         return x;
     }
     else {
-        throw new Error();
+        throw new Error(`assert_raw_token_value`);
     }
 }
 
@@ -69,21 +69,26 @@ export function as_string(value: ReaderEntry): string {
         return value;
     }
     else {
-        throw new Error();
+        const stack = new Error().stack;
+        throw new Error(`as_string ${value} ${typeof value} ${stack}`);
     }
 }
+
+// See: https://tc39.es/ecma262/#prod-NotEscapeSequence
+export type NotEscapeSequenceHead = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'x' | 'u';
 
 /**
  * Raw tokens are produced by the scanner.ts
  */
 export interface RawToken {
-    type: TokenKind;
-    value: ReaderEntry;
+    type: Token;
+    value: string | number;
     pattern?: string;
     flags?: string;
     regex?: RegExp | null;
     octal?: boolean;
-    cooked?: string;
+    cooked?: string | null;
+    notEscapeSequenceHead?: NotEscapeSequenceHead | null;
     head?: boolean;
     tail?: boolean;
     lineNumber: number;
@@ -91,21 +96,6 @@ export interface RawToken {
     start: number;
     end: number;
 }
-/*
-export const TokenName: { [key: number]: string } = {};
-TokenName[TokenKind.BooleanLiteral] = 'Boolean';
-TokenName[TokenKind.EOF] = '<end>';
-TokenName[TokenKind.Identifier] = 'Identifier';
-TokenName[TokenKind.Keyword] = 'Keyword';
-TokenName[TokenKind.NullLiteral] = 'Null';
-TokenName[TokenKind.NumericLiteral] = 'Numeric';
-TokenName[TokenKind.Punctuator] = 'Punctuator';
-TokenName[TokenKind.StringLiteral] = 'String';
-TokenName[TokenKind.RegularExpression] = 'RegularExpression';
-TokenName[TokenKind.Template] = 'Template';
-TokenName[TokenKind.JSXIdentifier] = 'JSXIdentifier';
-TokenName[TokenKind.JSXText] = 'JSXText';
-*/
 
 /**
  * RawToken is converted into TokenEntry by the parser.ts convertToken() function.

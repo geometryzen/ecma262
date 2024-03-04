@@ -1,7 +1,7 @@
 import { CommentHandler } from './comment-handler';
 import { Node } from './javascript';
 import { JSXParser } from './jsx-parser';
-import { Program } from './nodes';
+import { Module, Program, Script } from './nodes';
 import { MetaData, Parser } from './parser';
 import { TokenEntry } from './token';
 import { Tokenizer, TokenizerConfig } from './tokenizer';
@@ -82,17 +82,17 @@ export function parse(sourceText: string, options?: ParseOptions, delegate?: Par
     return program;
 }
 
-export function parseModule(code: string, options: ParseOptions = {}, delegate?: ParseDelegate): Program {
+export function parseModule(code: string, options: ParseOptions = {}, delegate?: ParseDelegate): Module {
     options.sourceType = 'module';
-    return parse(code, options, delegate);
+    return parse(code, options, delegate) as Module;
 }
 
-export function parseScript(code: string, options: ParseOptions = {}, delegate?: ParseDelegate): Program {
+export function parseScript(code: string, options: ParseOptions = {}, delegate?: ParseDelegate): Script {
     options.sourceType = 'script';
-    return parse(code, options, delegate);
+    return parse(code, options, delegate) as Script;
 }
 
-export function tokenize(sourceText: string, options: TokenizerConfig, hook?: (token: TokenEntry) => TokenEntry): { tokens: TokenEntry[], errors: Error[] } {
+export function tokenize(sourceText: string, options: TokenizerConfig, delegate?: (token: TokenEntry) => TokenEntry): TokenEntry[] {
     const tokenizer = new Tokenizer(sourceText, options);
 
     const tokens: TokenEntry[] = [];
@@ -104,8 +104,8 @@ export function tokenize(sourceText: string, options: TokenizerConfig, hook?: (t
             if (!token) {
                 break;
             }
-            if (hook) {
-                token = hook(token);
+            if (delegate) {
+                token = delegate(token);
             }
             tokens.push(token);
         }
@@ -115,11 +115,11 @@ export function tokenize(sourceText: string, options: TokenizerConfig, hook?: (t
     }
 
     if (tokenizer.errorHandler.tolerant) {
-        return { tokens, errors: tokenizer.errors() };
+        // Yeah, this is ugly.
+        (tokens as unknown as { [name: string]: Error[] })['errors'] = tokenizer.errors();
     }
-    else {
-        return { tokens, errors: [] };
-    }
+
+    return tokens;
 }
 
 // Sync with *.json manifests.

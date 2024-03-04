@@ -1,8 +1,6 @@
 import { ErrorHandler } from './error-handler';
 import { Comment, Scanner, SourceLocation } from './scanner';
-import { RawToken, ReaderEntry, TokenEntry, TokenKind, TokenName } from './token';
-
-const UNTRACKED_LOCATION: SourceLocation = { start: { line: -1, column: -1 }, end: { line: -1, column: -1 } };
+import { RawToken, ReaderEntry, Token, TokenEntry, TokenName } from './token';
 
 class Reader {
     readonly values: ReaderEntry[];
@@ -77,7 +75,7 @@ class Reader {
     }
 
     push(token: RawToken): void {
-        if (token.type === TokenKind.Punctuator || token.type === TokenKind.Keyword) {
+        if (token.type === Token.Punctuator || token.type === Token.Keyword) {
             if (token.value === '{') {
                 this.curly = this.values.length;
             }
@@ -128,13 +126,13 @@ export class Tokenizer {
     getNextToken(): TokenEntry {
         if (this.buffer.length === 0) {
 
-            const comments: Comment[] = this.scanner.scanComments();
-            if (this.scanner.trackComment) {
+            const comments: Comment[] | undefined = this.scanner.scanComments();
+            if (this.scanner.trackComment && Array.isArray(comments)) {
                 for (let i = 0; i < comments.length; ++i) {
                     const e: Comment = comments[i];
                     const value = this.scanner.source.slice(e.slice[0], e.slice[1]);
                     const comment: TokenEntry = {
-                        type: e.multiLine ? TokenName[TokenKind.BlockComment] : TokenName[TokenKind.LineComment],
+                        type: e.multiLine ? TokenName[Token.BlockComment] : TokenName[Token.LineComment],
                         value: value
                     };
                     if (this.trackRange) {
@@ -149,18 +147,36 @@ export class Tokenizer {
 
             if (!this.scanner.eof()) {
                 const trackLoc = this.trackLoc;
-                // Using the bogus UNTRACKED_LOCATION is an alternative to the casting if we used void 0 instead.
-                const loc: SourceLocation = trackLoc ? { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } } : UNTRACKED_LOCATION;
 
-                if (trackLoc) {
-                    loc.start.line = this.scanner.lineNumber;
-                    loc.start.column = this.scanner.index - this.scanner.lineStart;
+                let loc: SourceLocation | undefined;
+
+                if (this.trackLoc) {
+                    loc = {
+                        start: {
+                            line: this.scanner.lineNumber,
+                            column: this.scanner.index - this.scanner.lineStart
+                        },
+                        end: { line: -1, column: -1 }
+                    };
                 }
 
-                const startRegex = (this.scanner.source[this.scanner.index] === '/') && this.reader.isRegexStart();
-                const token = startRegex ? this.scanner.scanRegExp() : this.scanner.lex();
-                this.reader.push(token);
+                const maybeRegex = (this.scanner.source[this.scanner.index] === '/') && this.reader.isRegexStart();
+                let token: RawToken;
+                if (maybeRegex) {
+                    const state = this.scanner.saveState();
+                    try {
+                        token = this.scanner.scanRegExp();
+                    }
+                    catch (e) {
+                        this.scanner.restoreState(state);
+                        token = this.scanner.lex();
+                    }
+                }
+                else {
+                    token = this.scanner.lex();
+                }
 
+                this.reader.push(token);
                 const entry: TokenEntry = {
                     type: TokenName[token.type],
                     value: this.scanner.source.slice(token.start, token.end)
@@ -168,12 +184,12 @@ export class Tokenizer {
                 if (this.trackRange) {
                     entry.range = [token.start, token.end];
                 }
-                if (trackLoc) {
+                if (trackLoc && loc) {
                     loc.end.line = this.scanner.lineNumber;
                     loc.end.column = this.scanner.index - this.scanner.lineStart;
                     entry.loc = loc;
                 }
-                if (token.type === TokenKind.RegularExpression) {
+                if (token.type === Token.RegularExpression) {
                     const pattern = token.pattern as string;
                     const flags = token.flags as string;
                     entry.regex = { pattern, flags };
