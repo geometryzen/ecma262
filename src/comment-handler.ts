@@ -65,7 +65,7 @@ export class CommentHandler {
             const firstComment = last.node.trailingComments[0];
             if (firstComment && firstComment.range && firstComment.range[0] >= metadata.end.offset) {
                 trailingComments = last.node.trailingComments;
-                last.node.trailingComments.length = 0;
+                delete last.node.trailingComments;
             }
         }
         return trailingComments;
@@ -87,24 +87,20 @@ export class CommentHandler {
         }
 
         if (target) {
-            const leadingComments = target.leadingComments;
-            if (leadingComments) {
-                const count = leadingComments.length;
+            if (target.leadingComments) {
+                const count = target.leadingComments ? target.leadingComments.length : 0;
                 for (let i = count - 1; i >= 0; --i) {
-                    const comment = leadingComments[i];
-                    if (comment.range && comment.range[1] <= metadata.start.offset) {
+                    const comment = target.leadingComments[i];
+                    if (Array.isArray(comment.range) && comment.range[1] <= metadata.start.offset) {
                         leadingComments.unshift(comment);
-                        leadingComments.splice(i, 1);
+                        target.leadingComments.splice(i, 1);
                     }
                 }
-                if (leadingComments.length === 0) {
-                    delete target.leadingComments;
-                }
-                return leadingComments;
             }
-            else {
-                return void 0;
+            if (target.leadingComments && target.leadingComments.length === 0) {
+                delete target.leadingComments;
             }
+            return leadingComments;
         }
 
         for (let i = this.leading.length - 1; i >= 0; --i) {

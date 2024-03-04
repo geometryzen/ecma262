@@ -5,7 +5,7 @@ import { TokenEntry } from './token';
 
 export type ArgumentListElement = Expression | SpreadElement;
 export type ArrayExpressionElement = Expression | SpreadElement | null;
-export type ArrayPatternElement = ArrayPattern | AssignmentPattern | Identifier | ObjectPattern | RestElement | null;
+export type ArrayPatternElement = ArrayPattern | AssignmentPattern | ComputedMemberExpression | Identifier | ObjectPattern | RestElement | StaticMemberExpression | null;
 export type ChainElement = CallExpression | ComputedMemberExpression | StaticMemberExpression;
 export type Declaration = ClassDeclaration | ExportDeclaration | FunctionDeclaration | ImportDeclaration | VariableDeclaration;
 export type ExportableDefaultDeclaration = ArrayPattern | Identifier | ClassDeclaration | Expression | FunctionDeclaration | ObjectPattern;
@@ -306,9 +306,12 @@ export class ClassBody extends BaseNode {
 
 export class ClassDeclaration extends BaseNode {
     readonly id: Identifier | null;
-    readonly superClass: Identifier | null;
+    /**
+     * Must be an identifier of null to be valid.
+     */
+    readonly superClass: Identifier | Expression | null;
     readonly body: ClassBody;
-    constructor(id: Identifier | null, superClass: Identifier | null, body: ClassBody) {
+    constructor(id: Identifier | null, superClass: Identifier | Expression | null, body: ClassBody) {
         super(Syntax.ClassDeclaration);
         this.id = id;
         this.superClass = superClass;
@@ -318,9 +321,12 @@ export class ClassDeclaration extends BaseNode {
 
 export class ClassExpression extends BaseNode {
     readonly id: Identifier | null;
-    readonly superClass: Identifier | null;
+    /**
+     * Must be an Identifier of null to be valid.
+     */
+    readonly superClass: Identifier | Expression | null;
     readonly body: ClassBody;
-    constructor(id: Identifier | null, superClass: Identifier | null, body: ClassBody) {
+    constructor(id: Identifier | null, superClass: Identifier | Expression | null, body: ClassBody) {
         super(Syntax.ClassExpression);
         this.id = id;
         this.superClass = superClass;
@@ -540,15 +546,6 @@ export class Identifier extends BaseNode {
 
 export function is_identifier(node: Node): node is Identifier {
     return node instanceof Identifier;
-}
-
-export function assert_identifier(node: Node): Identifier {
-    if (is_identifier(node)) {
-        return node;
-    }
-    else {
-        throw new Error(`assert_identifier`);
-    }
 }
 
 export class IfStatement extends BaseNode {

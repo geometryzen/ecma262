@@ -11,9 +11,7 @@ import {
     ArrayPatternElement,
     ArrowFunctionExpression,
     ArrowParameterPlaceHolder,
-    assert_function_parameters,
-    assert_identifier,
-    assert_property_key,
+    assert_function_parameters, assert_property_key,
     assert_property_value,
     assert_rest_element_argument,
     AssignmentExpression,
@@ -1236,7 +1234,7 @@ export class Parser {
             return new RestElement(pattern);
         }
         else if (is_member_expression(pattern)) {
-            throw new Error(`reintepretSpreadElementAsRestElement B`);
+            return new RestElement(pattern);
         }
         else if (is_object_pattern(pattern)) {
             return new RestElement(pattern);
@@ -1249,7 +1247,7 @@ export class Parser {
         }
     }
 
-    reinterpretArrayExpressionElementAsArrayPatternElement(expr: ArrayExpressionElement): ArrayPatternElement {
+    reinterpretArrayExpressionElementAsArrayPatternElement(expr: ArrayExpressionElement): ArrayPatternElement | ComputedMemberExpression | StaticMemberExpression {
         if (expr) {
             if (is_spread_element(expr)) {
                 return this.reintepretSpreadElementAsRestElement(expr);
@@ -1260,11 +1258,24 @@ export class Parser {
             else if (is_array_expression(expr)) {
                 return this.reinterpretArrayExpressionAsArrayPattern(expr);
             }
+            else if (is_member_expression(expr)) {
+                return expr;
+            }
             else if (is_object_expression(expr)) {
                 return this.reinterpretObjectExpressionAsObjectPattern(expr);
             }
+            else if (is_assignment_expression(expr)) {
+                const pattern = this.reinterpretExpressionAsPattern(expr.left);
+                if (is_identifier(pattern)) {
+                    return pattern;
+                }
+                else if (is_array_pattern(pattern)) {
+                    return pattern;
+                }
+                throw new Error(`pattern ??? ${pattern.type}`);
+            }
             // TODO: AssignmentPattern may all be created.
-            throw new Error(`??? ${expr.type}`);
+            throw new Error(`expr ??? ${expr.type}`);
         }
         else {
             return null;
@@ -1272,7 +1283,7 @@ export class Parser {
     }
 
     reinterpretArrayExpressionAsArrayPattern(expr: ArrayExpression): ArrayPattern {
-        const elements: ArrayPatternElement[] = expr.elements.map(e => this.reinterpretArrayExpressionElementAsArrayPatternElement(e));
+        const elements: (ArrayPatternElement | ComputedMemberExpression | StaticMemberExpression)[] = expr.elements.map(e => this.reinterpretArrayExpressionElementAsArrayPatternElement(e));
         return new ArrayPattern(elements);
     }
 
@@ -3827,10 +3838,10 @@ export class Parser {
             this.expectKeyword('class');
 
             const id = (identifierIsOptional && (this.lookahead.type !== Token.Identifier)) ? null : this.parseVariableIdentifier();
-            let superClass: Identifier | null = null;
+            let superClass: Identifier | Expression | null = null;
             if (this.matchKeyword('extends')) {
                 this.nextToken();
-                superClass = assert_identifier(this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall));
+                superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
             }
             const classBody = this.parseClassBody();
             this.context.strict = previousStrict;
@@ -3850,10 +3861,10 @@ export class Parser {
         this.context.strict = true;
         this.expectKeyword('class');
         const id = (this.lookahead.type === Token.Identifier) ? this.parseVariableIdentifier() : null;
-        let superClass: Identifier | null = null;
+        let superClass: Identifier | Expression | null = null;
         if (this.matchKeyword('extends')) {
             this.nextToken();
-            superClass = assert_identifier(this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall));
+            superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
         }
         const classBody = this.parseClassBody();
         this.context.strict = previousStrict;
