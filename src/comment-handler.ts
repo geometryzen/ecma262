@@ -113,7 +113,7 @@ export class CommentHandler {
         return leadingComments;
     }
 
-    visitNode(node: Node, metadata: MetaData) {
+    visitNode(node: Node, metadata: MetaData): void {
         if (is_program(node) && node.body.length > 0) {
             return;
         }
@@ -134,7 +134,7 @@ export class CommentHandler {
         });
     }
 
-    visitComment(node: LineComment | BlockComment, metadata: MetaData) {
+    visitComment(node: LineComment | BlockComment, metadata: MetaData): void {
         const type = is_line_comment(node) ? 'Line' : 'Block';
         const comment: Comment = {
             type: type,
@@ -165,7 +165,7 @@ export class CommentHandler {
         }
     }
 
-    visit(node: Node, metadata: MetaData) {
+    visit(node: Node, metadata: MetaData): void {
         if (is_line_comment(node)) {
             this.visitComment(node, metadata);
         }

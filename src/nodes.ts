@@ -46,7 +46,7 @@ export function assert_function_parameters(nodes: Node[]): FunctionParameter[] {
 }
 
 export type ImportDeclarationSpecifier = ImportDefaultSpecifier | ImportNamespaceSpecifier | ImportSpecifier;
-export type ObjectExpressionProperty = Property | SpreadProperty;
+export type ObjectExpressionProperty = Property | SpreadElement;
 export type ObjectPatternProperty = Property | RestElement;
 export type Program = Module | Script;
 export type Statement = BreakStatement | ContinueStatement | DebuggerStatement | DoWhileStatement |
@@ -711,7 +711,7 @@ export class Property extends BaseNode {
     readonly key: PropertyKey;
     readonly computed: boolean;
     readonly value: PropertyValue | null;
-    readonly kind: string;
+    readonly kind: 'get' | 'set' | 'init';
     readonly method: boolean;
     readonly shorthand: boolean;
     constructor(kind: 'get' | 'set' | 'init', key: PropertyKey, computed: boolean, value: PropertyValue | null, method: boolean, shorthand: boolean) {
@@ -832,10 +832,6 @@ export class SpreadProperty extends BaseNode {
     }
 }
 
-export function is_spread_property(node: Node): node is SpreadProperty {
-    return node instanceof SpreadProperty;
-}
-
 export class StaticMemberExpression extends BaseNode {
     readonly computed: boolean;
     readonly object: Expression;
@@ -849,6 +845,7 @@ export class StaticMemberExpression extends BaseNode {
         this.optional = optional;
     }
 }
+
 export function is_static_member_expression(node: Node): node is StaticMemberExpression {
     return node instanceof StaticMemberExpression;
 }

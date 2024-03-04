@@ -386,7 +386,6 @@ export class JSXParser extends Parser {
         else {
             return elementName;
         }
-
     }
 
     parseJSXAttributeName(): JSXAttributeName {
